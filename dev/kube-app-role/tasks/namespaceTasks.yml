@@ -1,0 +1,173 @@
+---
+#Deleting directory if it exists from previous failed build
+- block:
+  - name: remove the git2consul folder
+    file:
+      path: /tmp/config
+      state: absent
+
+- name: Download control-repo-namespace zip from jfrog
+  shell: jfrog rt dl "{{registry_id}}/{{Cr_groupId}}/{{env_name}}/{{majorVersion}}.{{s2_build_number}}/{{env_name}}-{{s2_build_number}}.zip" {{temporary_folder}}-{{artifact_id}}/ --flat=true
+
+- name: Unzip the downloaded zip
+  unarchive:
+    src: "{{temporary_folder}}-{{artifact_id}}/{{env_name}}-{{s2_build_number}}.zip"
+    dest: "{{temporary_folder}}-{{artifact_id}}"
+    mode: 0755
+  ignore_errors: yes
+
+- name: Create a temporary directory to store all microservice related data for this namespace
+  ansible.builtin.file:
+    path: "{{temporary_folder}}-{{artifact_id}}/msZip"
+    state: directory
+    mode: '0755'
+
+- name: Create a repository directory to checkout namespace repository
+  ansible.builtin.file:
+    path: "{{temporary_folder}}-{{artifact_id}}/xor-{{env_name}}"
+    state: directory
+    mode: '0755'
+
+- name: Clone the namespace-repository
+  git:
+    repo: "{{repoLink}}"
+    dest: "{{temporary_folder}}-{{artifact_id}}/xor-{{env_name}}"
+    version: "{{branch}}"
+
+# - name: Create pvc
+#   shell: "kubectl apply -f {{temporary_folder}}-{{artifact_id}}/{{env_name}}/kubernetes -n {{env_name}}"
+
+# - name: var file generation
+#   include_vars:
+#     file: "{{temporary_folder}}-{{artifact_id}}/{{env_name}}/env-vars.yaml"
+#     name: variables
+    
+# - block:
+#     - name: check if config.json exists
+#       stat:
+#         path: "{{temporary_folder}}-{{artifact_id}}/gf-ifcs-{{env_name}}/git2consul/config.json"
+#       register: file_git2consul
+
+#     - name: Configure git2consul ( add url into the config.json )
+#       become: yes
+#       lineinfile:
+#         path: "{{temporary_folder}}-{{artifact_id}}/gf-ifcs-{{env_name}}/git2consul/config.json"
+#         regexp: '^    "url" :'
+#         line: '    "url": "{{repoLink}}",'
+#         state: present
+#       when: file_git2consul.stat.exists
+
+#     - name: Configure git2consul  ( add branch into the config.json )
+#       become: yes
+#       lineinfile:
+#         path: "{{temporary_folder}}-{{artifact_id}}/gf-ifcs-{{env_name}}/git2consul/config.json"
+#         regexp: '^    "branches" :'
+#         line: '    "branches": ["{{branch}}"],'
+#         state: present
+#       when: file_git2consul.stat.exists
+
+#     - name: Read the consul-server ip
+#       shell: "kubectl get pod consul-server-0 -o jsonpath={.status.podIP} -n consul"
+#       register: resultip
+#       when: file_git2consul.stat.exists
+
+#     - name: run git2consul
+#       shell: git2consul --endpoint {{resultip.stdout}} --port 8500 --config-file {{temporary_folder}}-{{artifact_id}}/gf-ifcs-{{env_name}}/git2consul/config.json -n
+#       args:
+#         executable: /bin/bash
+#       when: file_git2consul.stat.exists
+
+# - block:
+#     - name: Read the environment decryption passphrase
+#       shell: aws secretsmanager get-secret-value --secret-id environments_secrets_passphrase | jq --raw-output '.SecretString' | jq -r '."{{env_name}}"'
+#       register: result
+
+#     - name: Decrypt the secret file
+#       shell:  openssl enc -aes-256-cbc -d -in {{temporary_folder}}-{{artifact_id}}/gf-ifcs-{{env_name}}/secrets/secrets.json -out secret.json -k {{result.stdout}}
+
+#     - name: Load the secret file and create k8s secrete object
+#       shell: kubectl create secret generic {{env_name}}-secret --from-env-file <(jq -r "to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" secret.json) --save-config --dry-run=client --namespace={{env_name}} -o yaml | kubectl apply -f -
+#       args:
+#         executable: /bin/bash
+
+# - block:
+#     - name: Read the environment decryption passphrase
+#       shell: aws secretsmanager get-secret-value --secret-id environments_secrets_passphrase | jq --raw-output '.SecretString' | jq -r '."{{env_name}}"'
+#       register: result
+
+#     - name: Decrypt the secret file
+#       shell:  openssl enc -aes-256-cbc -d -in {{temporary_folder}}-{{artifact_id}}/gf-ifcs-{{env_name}}/secrets/secret-vars.yaml -out {{temporary_folder}}-{{artifact_id}}/secret-vars.yaml -k {{result.stdout}}
+    
+#     - name: secret var file generation
+#       include_vars:
+#         file: "{{temporary_folder}}-{{artifact_id}}/secret-vars.yaml"
+#         name: secretVars
+
+- block:
+    # - name: Read version.json
+    #   shell: cat {{temporary_folder}}-{{artifact_id}}/{{env_name}}/versions.json
+    #   register: result
+
+    - name: Read version.json and save the json data
+      set_fact:
+        # jsondata: "{{ result.stdout | from_json }}"
+        jsondata: "{{ lookup('file', '{{temporary_folder}}-{{artifact_id}}/{{env_name}}/versions.json') | from_json }}"
+        
+
+    - name: convert into json data into list
+      set_fact:
+        versionData: "{{ jsondata | dict2items }}"
+
+
+
+- name: Create a namespace directory if it does not exist in kube_manifests
+  ansible.builtin.file:
+    path: "{{manifest_base_dir}}/{{env_name}}"
+    state: directory
+    mode: '0755'
+
+
+- name: loop though all the microservices in version.json
+  include_tasks: templatePlaybook.yml
+  vars:
+    msData: "{{ ms_loop }}"
+    artifactId: "{{ ms_loop.key }}"  
+    kubetemplatevars: "{{variables}}" 
+    secretTemplateVars: "{{secretVars}}" 
+  with_items: "{{versionData}}"
+  loop_control:
+    loop_var: ms_loop
+
+
+- name: Get list of folders on which kubectl needs to be applied
+  find:
+    paths: "{{manifest_base_dir}}/{{env_name}}"
+    recurse: no
+    file_type: directory
+  register: folder_list
+
+
+- name: Applying all the kubernetes objects
+  shell: "kubectl apply $(find {{folder.path}}/ -iname '*.yaml' -or -iname '*.yml' | awk ' { print \" -f \" $1 } ') -n {{env_name}}"
+  with_items: "{{folder_list.files}}"
+  loop_control:
+    loop_var: folder
+
+# create/update cname entries for active-mq and transauth if services exist in environment , else will ignore
+# - name: Running python script to create CNAME record (if absent) in route53 for available active-mq and transauth-jpos svc 
+#   shell: "python3 {{base_path}}/files/route53Create.py {{variables.envSubDomain}} {{variables.envBaseDomain}} {{variables.clientName}}"
+#   args:
+#     executable: /bin/bash
+
+#Cleaning namespace related local folders
+# - block:
+#   - name: remove the git2consul folder
+#     file:
+#       path: /tmp/config
+#       state: absent
+
+  
+
+  
+
+

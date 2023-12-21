@@ -1,0 +1,6 @@
+---
+home_folder: "/home/ec2-user"
+manifest_base_dir: "{{home_folder}}/kube_manifests"
+base_path: "{{home_folder}}/artifact_ansible_script/cicd-ansible-scripts/dev/kube-app-role"
+temporary_folder: "{{home_folder}}/temporaryVersion"
+username: Shubham-Xor

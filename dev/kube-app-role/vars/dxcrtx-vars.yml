@@ -1,0 +1,23 @@
+---
+#If we should deploy this kubernetes or not.
+# Setting this to false and re-running our deploy playbook will remove the kubernetes deployment
+# example to remove: ansible-playbook kubernetes/kube.deployment.playbook.yml --extra-vars '{deployment_enabled: false}'
+deployment_enabled: true
+
+
+# Variabled specific to our app or service
+app:
+# Port exposed on kubernetes worker
+  port: 80
+  container_image: xoriant-docker.eu-central-1.artifactory.wexapps.com/poc-omv-dev-ifcs:5
+  cport: 8080
+# Port exposed to the pod - note that nodePort is typically forwarded to this port
+
+  nport: 32537
+
+# A compiled variable of our image we will run in the pod
+# Note: this needs to be built outside of our our app: context due to a recursion bug in jinja2
+
+  #pricing batch : {{ 1.23,1.24,1.25 | 1.23 }}
+  #catalog : 1.23
+  #payment: 2. container_ima

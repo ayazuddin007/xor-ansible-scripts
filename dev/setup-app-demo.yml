@@ -1,0 +1,16 @@
+#!/usr/bin/env ansible-playbook
+---
+# This playbook will manage app role configuration
+
+- hosts: localhost
+  pre_tasks:
+  - name:  Get hostname
+    block:
+    - name: Show inventory_hostname
+      debug:
+        var: inventory_hostname
+    - name: Show ansible_hostname
+      debug:
+        var: ansible_hostname
+  roles:
+    - kube-app-role

@@ -1,0 +1,25 @@
+---
+# If we should deploy this kubernetes or not.  
+# Setting this to false and re-running our deploy playbook will remove the kubernetes deployment 
+# example to remove: ansible-playbook kubernetes/kube.deployment.playbook.yml --extra-vars '{deployment_enabled: false}'
+deployment_enabled: true 
+
+# Docker registry where this image will come from 
+docker_registry: kiab.local:5000
+
+# Variabled specific to our app or service
+app:
+  # Port exposed on kubernetes worker
+
+  port: 80
+  container_image: ifcs-docker.eu-central-1.artifactory.wexapps.com/com.wexinc.gf.ifcs.app.core/monolith/ifcs-server:2.70
+  cport: 8080
+ # Port exposed to the pod - note that nodePort is typically forwarded to this port
+
+#  nport: 32534
+
+# A compiled variable of our image we will run in the pod  
+# Note: this needs to be built outside of our our app: context due to a recursion bug in jinja2 
+
+  #pricing batch : 2.14
+  #catalog : 1.20

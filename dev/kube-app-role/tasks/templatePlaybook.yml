@@ -1,0 +1,45 @@
+---
+- name: Running the python script
+  shell: "python3 {{base_path}}/files/jfrogVersion.py {{artifactId}} {{msData.value}}"
+  register: jfrogFolderLink
+  args:
+    executable: /bin/bash
+
+# - name: Exit if the version is out of range
+#   fail:
+#     msg: Version is out of range
+#   when: jfrogFolderLink.stdout == "False"
+  
+- name: Download zip of kubernetes-manifests
+  shell: jfrog rt dl "{{jfrogFolderLink.stdout}}" {{temporary_folder}}-{{artifact_id}}/msZip/ --flat=true
+  when: jfrogFolderLink.stdout != "False"
+
+- name: Unzip the downloaded zip
+  unarchive:
+    src: "{{temporary_folder}}-{{artifact_id}}/msZip/{{jfrogFolderLink.stdout.split(\"/\")[-1]}}"
+    dest: "{{temporary_folder}}-{{artifact_id}}/msZip/"
+  when: jfrogFolderLink.stdout != "False"
+
+- debug:
+   var: msData.key
+  when: jfrogFolderLink.stdout != "False"
+
+- name: Create a ms directory if it does not exist in namespace dir
+  ansible.builtin.file:
+    path: "{{manifest_base_dir}}/{{env_name}}/{{msData.key.split(\":\")[-1]}}"
+    state: directory
+    mode: '0755'
+  when: jfrogFolderLink.stdout != "False"
+
+- name: Configuring and applying templates
+  include_tasks: manifestPlaybook.yml
+  vars:
+    filename: "{{templatemanifestFile}}"
+    rootname: "{{templatemanifestFile | basename}}"
+  with_fileglob:
+    - "{{temporary_folder}}-{{artifact_id}}/msZip/{{msData.key.split(\":\")[-1]}}/*"
+  loop_control:
+    loop_var: templatemanifestFile
+  when: jfrogFolderLink.stdout != "False"
+
+

@@ -1,0 +1,45 @@
+---
+#Setting the proper kubernetes contex
+- name: Set kubernetes cluster
+  shell: kubectx {{clusterName}}
+  
+#Deleting directory if it exists from previous failed build
+- block:
+
+  - name: remove the temporary directory
+    file:
+      path: "{{temporary_folder}}-{{artifact_id}}"
+      state: absent
+
+- name: Create a temporary directory to store namespace/ms data
+  ansible.builtin.file:
+    path: "{{temporary_folder}}-{{artifact_id}}"
+    state: directory
+    mode: '0755'
+
+#- name: Loop through all the namepaces
+#  include_tasks: namespaceTasks.yml
+#  vars:
+#    env_name: "{{ item }}"
+#    repoLink: "git@github.com:wexinc/gf-ifcs-{{item}}.git"
+#     repoLink: "https://github.com/wexinc/gf-ifcs-{{item}}.git"
+#  with_items: "{{ namespaces }}"
+
+- name: Read the github password
+  shell: aws secretsmanager get-secret-value --secret-id git_jfrog_credentials | jq --raw-output '.SecretString' | jq -r '."github_password"'
+  register: password
+
+- name: Loop through all the namepaces
+  include_tasks: namespaceTasks.yml
+  vars:
+    env_name: "{{ item }}"
+    repoLink: "https://{{ username }}:{{ password.stdout }}@github.com/Shubham-Xor/xor-{{item}}.git"
+  with_items: "{{ namespaces }}"
+
+#Cleaning up temporary folders
+- block:
+
+  - name: remove the temporary directory
+    file:
+      path: "{{temporary_folder}}-{{artifact_id}}"
+      state: absent

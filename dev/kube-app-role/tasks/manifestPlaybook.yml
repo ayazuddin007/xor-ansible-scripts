@@ -1,0 +1,7 @@
+- name: create manifest for kube deploy
+  template:
+    src: "{{filename}}"
+    dest: "{{manifest_base_dir}}/{{env_name}}/{{msData.key.split(\":\")[-1]}}/{{rootname}}"
+  vars:
+    kubevars: "{{kubetemplatevars}}"
+    secret: "{{secretTemplateVars}}"

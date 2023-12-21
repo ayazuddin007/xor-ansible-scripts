@@ -1,0 +1,3 @@
+---
+manifest_base_dir: /home/ubuntu/kube_manifests
+manifest_app_dir: "{{manifest_base_dir}}/{{app.name}}"
